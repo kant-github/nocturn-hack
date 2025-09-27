@@ -3,6 +3,7 @@ import cors from 'cors';
 import http from 'http';
 import cookieParser from 'cookie-parser';
 import { env } from './configs/env';
+import router from './routes';
 
 const PORT = env.SERVER_PORT;
 const WEB_URL = env.SERVER_WEB_URL;
@@ -16,6 +17,8 @@ app.use(
         credentials: true,
     }),
 );
+
+app.use('/api/v1', router);
 
 
 server.listen(PORT, () => {
