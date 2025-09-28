@@ -13,7 +13,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model User {
   id            String  @id @default(cuid())
   name          String
@@ -33,11 +32,12 @@ model User {
 }
 
 model Quiz {
-  id              String   @id @default(cuid())
-  title           String   @db.VarChar(50)
+  id              String  @id @default(cuid())
+  title           String  @db.VarChar(50)
   description     String?
-  participantCode String?  @unique
-  spectatorCode   String?  @unique
+  theme           Template @default(CLASSIC)
+  participantCode String? @unique
+  spectatorCode   String? @unique
   spectatorLink   String?
 
   prizePool Float // Maybe in lamports -> then Number
@@ -49,8 +49,9 @@ model Quiz {
 
   eliminationThreshold Float @default(0.5)
 
-  questionTimeLimit     Int            @default(30)
-  breakBetweenQuestions Int            @default(5)
+  questionTimeLimit     Int        @default(30)
+  breakBetweenQuestions Int        @default(5)
+  status                QuizStatus @default(CREATED)
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -60,10 +61,196 @@ model Quiz {
   hostId      String
   host        User      @relation(fields: [hostId], references: [id], onDelete: Cascade)
 
-  autoSave          Boolean @default(true)
-  liveChat          Boolean @default(false)
-  spectatorMode     Boolean @default(false)
-  allowNewSpectator Boolean @default(true)
+  autoSave          Boolean       @default(true)
+  liveChat          Boolean       @default(false)
+  spectatorMode     Boolean       @default(false)
+  allowNewSpectator Boolean       @default(true)
+  questions          Question[]
+  GameSession       GameSession?
+  participants       Participant[]
 
   @@map("quizzes")
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  question      String
+  options       String[]
+  correctAnswer Int
+  explanation   String?
+  hint          String?
+
+  difficulty    Int           @default(1)
+  readingTime   Int           @default(7) // these will be in seconds
+  basePoints    Int           @default(100)
+  timeLimit     Int           @default(30) // these will be in seconds
+  imagePosition ImagePosition @default(RIGHT)
+
+  orderIndex Int
+  imageUrl   String?
+  isAsked    Boolean @default(false)
+
+  quizId   String
+  quiz     Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  Response Response[]
+}
+
+model Response {
+  id             String  @id @default(cuid())
+  selectedAnswer Int
+  isCorrect      Boolean
+  timeToAnswer   Int
+  pointsEarned   Int
+
+  timeBonus   Int      @default(0)
+  streakBonus Int      @default(0)
+  answeredAt  DateTime @default(now())
+
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  gameSessionId String
+  gameSession   GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, questionId])
+  @@map("responses")
+}
+
+model GameSession {
+  id                   String        @id @default(cuid())
+  currentQuestionIndex Int           @default(0)
+  currentQuestionId    String?
+  status               SessionStatus @default(WAITING)
+
+  hostScreen        HostScreen        @default(LOBBY)
+  participantScreen ParticipantScreen @default(LOBBY)
+  spectatorScreen   SpectatorScreen   @default(LOBBY)
+
+  questionStartedAt DateTime?
+  questionEndsAt    DateTime?
+
+  lastEliminationAt Int?
+  nextEliminationAt Int?
+
+  totalParticipants  Int @default(0)
+  activeParticipants Int @default(0)
+  totalSpectators    Int @default(0)
+
+  avgResponseTime   Int   @default(0)
+  correctAnswerRate Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  currentPhase   QuizPhase? // e.g. QUESTION_READING, QUESTION_ACTIVE, SHOW_RESULTS
+  phaseStartTime DateTime? // when current phase started (absolute time from server)
+  phaseEndTime   DateTime?
+
+  quizId    String     @unique
+  quiz      Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  responses Response[]
+
+  @@map("game_sessions")
+}
+
+model Participant {
+  id                   String     @id @default(cuid())
+  nickname             String
+  avatar               String?
+  ipAddress            String?
+  isNameChanged        Boolean    @default(false)
+  warningCount         Int        @default(0)
+  isEliminated         Boolean    @default(false)
+  eliminatedAt         DateTime?
+  eliminatedAtQuestion String?
+  finalRank            Int?
+  totalScore           Int        @default(0)
+  correctAnswers       Int        @default(0)
+  longestStreak        Int        @default(0)
+  walletAddress        String?
+  quizId               String
+  quiz                 Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  Response             Response[]
+
+  @@map("participants")
+}
+
+enum QuizStatus {
+  CREATED
+  SCHEDULED
+  PUBLISHED
+  LIVE
+  COMPLETED
+  CANCELLED
+  PAYOUT_PENDING
+  PAYOUT_COMPLETED
+  NULL
+}
+
+enum Template {
+  CLASSIC
+  MODERN
+  PASTEL
+  NEON
+  YELLOW
+  GREEN
+  BLUE
+}
+
+enum Interactions {
+  THUMBS_UP
+  DOLLAR
+  BULB
+  HEART
+  SMILE
+}
+
+enum SessionStatus {
+  WAITING
+  LIVE
+  COMPLETED
+  PAUSED
+}
+
+enum ParticipantScreen {
+  LOBBY
+  COUNTDOWN
+  QUESTION_MOTIVATION
+  QUESTION_READING
+  QUESTION_ACTIVE
+  QUESTION_RESULTS
+}
+
+enum SpectatorScreen {
+  LOBBY
+  QUESTION_MOTIVATION
+  QUESTION_READING
+  QUESTION_ACTIVE
+  QUESTION_RESULTS
+}
+
+enum HostScreen {
+  LOBBY
+  QUESTION_PREVIEW
+  QUESTION_READING // 5 seconds
+  QUESTION_ACTIVE
+  QUESTION_RESULTS // will wait here for host for start next question
+}
+
+enum QuizPhase {
+  QUESTION_READING
+  QUESTION_ACTIVE
+  SHOW_RESULTS
+  WAITING_NEXT
+}
+
+enum ReactorType {
+  HOST
+  SPECTATOR
+}
+
+enum ImagePosition {
+  RIGHT
+  LEFT
 }

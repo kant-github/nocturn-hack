@@ -20,4 +20,17 @@ export type {
   // Model types --------------------------->
   User,
   Quiz,
-} from "@prisma/client"
+  Question,
+  Participant,
+  GameSession,
+  Response,
+} from "@prisma/client";
+
+// Enum types ----------------------------->
+export {
+  QuizStatus,
+  SessionStatus,
+  ParticipantScreen,
+  HostScreen,
+  SpectatorScreen,
+} from "@prisma/client";
